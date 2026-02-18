@@ -1,5 +1,26 @@
 # Benchmark Guide
 
+## 0) One-command soak run (recommended)
+
+Run once, come back in 1-2 hours, and read saved results:
+
+```bash
+chmod +x scripts/run_soak_benchmark.sh scripts/read_load.py
+
+# 1 hour default
+./scripts/run_soak_benchmark.sh
+
+# 2 hour run example
+DURATION_SECONDS=7200 ./scripts/run_soak_benchmark.sh
+```
+
+Output is written to `benchmarks/soak_<timestamp>/`:
+
+- `summary.md`
+- `summary.json`
+- `write.log`
+- `read.log`
+
 ## 1) Start stack
 
 ```bash
