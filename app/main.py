@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
         provider_factory=provider_factory,
         producer=producer,
         cache=price_cache,
+        settings=settings,
     )
     polling_manager = PollingJobManager(
         session_factory=SessionLocal,

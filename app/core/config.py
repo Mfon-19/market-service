@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     provider_rate_limit_per_minute: int = 2
     provider_http_max_retries: int = 2
     provider_http_backoff_seconds: float = 1.5
+    enable_yahoo_rate_limit_fallback: bool = True
+    yahoo_rate_limit_fallback_provider: str = "alpha_vantage"
     alpha_vantage_api_key: str = ""
     finnhub_api_key: str = ""
 

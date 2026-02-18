@@ -79,6 +79,8 @@ Rate-limit knobs (important for Yahoo):
 - `PROVIDER_RATE_LIMIT_PER_MINUTE`
 - `PROVIDER_HTTP_MAX_RETRIES`
 - `PROVIDER_HTTP_BACKOFF_SECONDS`
+- `ENABLE_YAHOO_RATE_LIMIT_FALLBACK`
+- `YAHOO_RATE_LIMIT_FALLBACK_PROVIDER` (set to `alpha_vantage`)
 
 3. Start stack:
 
