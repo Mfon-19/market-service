@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import make_asgi_app
 
 from app.api.routes.health import router as health_router
 from app.api.routes.prices import router as prices_router
@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
 from app.services.cache import PriceCache
+from app.services.http_metrics import HTTPMetricsMiddleware
 from app.services.ingestion import PriceIngestionService
 from app.services.kafka_producer import PriceEventProducer
 from app.services.polling import PollingJobManager
@@ -49,8 +50,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app.add_middleware(HTTPMetricsMiddleware)
 
 app.include_router(health_router)
 app.include_router(prices_router)
-
-Instrumentator().instrument(app).expose(app)
+app.mount("/metrics", make_asgi_app())

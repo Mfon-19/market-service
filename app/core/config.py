@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:29092"
     kafka_topic: str = "price-events"
     kafka_group_id: str = "moving-average-consumer"
+    kafka_topic_partitions: int = 8
 
     redis_url: str = "redis://localhost:6379/0"
     use_redis_cache: bool = True
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     poll_default_interval_seconds: int = 60
     poll_min_interval_seconds: int = 15
     poll_max_symbols_per_job: int = 20
+
+    consumer_batch_size: int = 200
+    consumer_poll_timeout_ms: int = 1000
+    consumer_retry_backoff_seconds: float = 2.0
 
     worker_metrics_port: int = 9108
 

@@ -1,5 +1,6 @@
 import uuid
 from math import ceil
+import time
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,6 +17,7 @@ from app.schemas.price import (
     PriceLatestResponse,
 )
 from app.services.ingestion import PriceIngestionService
+from app.services.metrics import LATEST_PRICE_REQUEST_DURATION_SECONDS
 from app.services.polling import PollingJobManager
 from app.services.providers.exceptions import ProviderRateLimitError
 from app.services.providers.factory import ProviderFactory
@@ -31,32 +33,49 @@ def get_latest_price(
 ) -> PriceLatestResponse:
     symbol_normalized = symbol.strip().upper()
     provider_normalized = provider.strip().lower()
-
-    cached = ingestion.read_cached(symbol=symbol_normalized, provider=provider_normalized)
-    if cached is not None:
-        return cached
+    started = time.perf_counter()
+    cached_label = "false"
+    status_label = "200"
 
     try:
+        cached = ingestion.read_cached(symbol=symbol_normalized, provider=provider_normalized)
+        if cached is not None:
+            cached_label = "true"
+            return cached
+
+        latest = ingestion.read_latest_from_store(symbol=symbol_normalized, provider=provider_normalized)
+        if latest is not None:
+            ingestion.warm_cache(provider_normalized, latest)
+            return latest
+
         return ingestion.fetch_store_publish(symbol=symbol_normalized, provider=provider_normalized)
     except ProviderRateLimitError as exc:
         persisted = ingestion.read_latest_persisted(symbol=symbol_normalized, provider=provider_normalized)
         if persisted is not None:
+            ingestion.warm_cache(provider_normalized, persisted)
             return persisted
 
         headers = None
         if exc.retry_after_seconds is not None:
             headers = {"Retry-After": str(max(1, ceil(exc.retry_after_seconds)))}
+        status_label = str(status.HTTP_429_TOO_MANY_REQUESTS)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(exc),
             headers=headers,
         ) from exc
     except ValueError as exc:
+        status_label = str(status.HTTP_400_BAD_REQUEST)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except requests.RequestException as exc:
+        status_label = str(status.HTTP_502_BAD_GATEWAY)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="provider request failed") from exc
     except RuntimeError as exc:
+        status_label = str(status.HTTP_502_BAD_GATEWAY)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    finally:
+        duration = time.perf_counter() - started
+        LATEST_PRICE_REQUEST_DURATION_SECONDS.labels(cached=cached_label, status=status_label).observe(duration)
 
 
 @router.post("/poll", response_model=PollJobAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)

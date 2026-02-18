@@ -1,0 +1,111 @@
+{
+  "id": null,
+  "uid": "market-performance",
+  "title": "Market Service Performance",
+  "tags": ["market", "performance"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API /prices/latest Latency (p50/p95/p99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"true\"}[5m])) by (le))",
+          "legendFormat": "cached=true p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"true\"}[5m])) by (le))",
+          "legendFormat": "cached=true p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"true\"}[5m])) by (le))",
+          "legendFormat": "cached=true p99"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"false\"}[5m])) by (le))",
+          "legendFormat": "cached=false p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"false\"}[5m])) by (le))",
+          "legendFormat": "cached=false p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"false\"}[5m])) by (le))",
+          "legendFormat": "cached=false p99"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Cache Hit Ratio",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(cache_hit_total[5m])) / clamp_min(sum(rate(cache_hit_total[5m])) + sum(rate(cache_miss_total[5m])), 1)",
+          "legendFormat": "hit ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Consumer Lag",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(kafka_consumer_lag)",
+          "legendFormat": "total lag"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Pipeline End-to-End p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(price_pipeline_end_to_end_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Events/sec Processed",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(events_processed_total[1m]))",
+          "legendFormat": "events/sec"
+        }
+      ]
+    }
+  ],
+  "templating": {"list": []},
+  "annotations": {"list": []}
+}

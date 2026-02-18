@@ -3,6 +3,7 @@ set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8000}"
 PROVIDER="${PROVIDER:-yahoo}"
+ACTUAL_PROVIDER="$PROVIDER"
 PRIMARY_SYMBOL="${PRIMARY_SYMBOL:-AAPL}"
 MA_SYMBOL="${MA_SYMBOL:-MSFT}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-market-postgres}"
@@ -85,7 +86,7 @@ else
   fail "GET /health failed (status=$HTTP_STATUS body=$HTTP_BODY)"
 fi
 
-METRICS="$(curl -sS "$API_URL/metrics" || true)"
+METRICS="$(curl -sS "$API_URL/metrics/" || true)"
 if grep -q "provider_call_latency_seconds" <<<"$METRICS"; then
   pass "GET /metrics exposes custom metrics"
 else
@@ -95,6 +96,7 @@ fi
 step "Latest price and cache behavior"
 http_call GET "$API_URL/prices/latest?symbol=$PRIMARY_SYMBOL&provider=$PROVIDER"
 if [[ "$HTTP_STATUS" == "200" ]] && jq -e '.symbol and .provider and .price and .timestamp' >/dev/null <<<"$HTTP_BODY"; then
+  ACTUAL_PROVIDER="$(jq -r '.provider' <<<"$HTTP_BODY")"
   pass "First latest-price request returned valid payload"
 elif [[ "$HTTP_STATUS" == "502" ]] && jq -e '.detail == "provider request failed"' >/dev/null <<<"$HTTP_BODY"; then
   PROVIDER_AVAILABLE=0
@@ -126,19 +128,19 @@ fi
 
 step "Postgres write checks"
 if (( PROVIDER_AVAILABLE == 1 )); then
-  RAW_COUNT="$(run_sql "select count(*) from raw_market_data where symbol='${PRIMARY_SYMBOL}' and provider='${PROVIDER}';" | tr -d '[:space:]')"
-  PRICE_COUNT="$(run_sql "select count(*) from price_points where symbol='${PRIMARY_SYMBOL}' and provider='${PROVIDER}';" | tr -d '[:space:]')"
+  RAW_COUNT="$(run_sql "select count(*) from raw_market_data where symbol='${PRIMARY_SYMBOL}' and provider='${ACTUAL_PROVIDER}';" | tr -d '[:space:]')"
+  PRICE_COUNT="$(run_sql "select count(*) from price_points where symbol='${PRIMARY_SYMBOL}' and provider='${ACTUAL_PROVIDER}';" | tr -d '[:space:]')"
 
   if [[ "${RAW_COUNT:-0}" =~ ^[0-9]+$ ]] && (( RAW_COUNT > 0 )); then
-    pass "raw_market_data has rows for ${PRIMARY_SYMBOL}/${PROVIDER}"
+    pass "raw_market_data has rows for ${PRIMARY_SYMBOL}/${ACTUAL_PROVIDER}"
   else
-    fail "raw_market_data has no rows for ${PRIMARY_SYMBOL}/${PROVIDER}"
+    fail "raw_market_data has no rows for ${PRIMARY_SYMBOL}/${ACTUAL_PROVIDER}"
   fi
 
   if [[ "${PRICE_COUNT:-0}" =~ ^[0-9]+$ ]] && (( PRICE_COUNT > 0 )); then
-    pass "price_points has rows for ${PRIMARY_SYMBOL}/${PROVIDER}"
+    pass "price_points has rows for ${PRIMARY_SYMBOL}/${ACTUAL_PROVIDER}"
   else
-    fail "price_points has no rows for ${PRIMARY_SYMBOL}/${PROVIDER}"
+    fail "price_points has no rows for ${PRIMARY_SYMBOL}/${ACTUAL_PROVIDER}"
   fi
 else
   skip "Postgres ingestion-row checks skipped due to provider outage"
@@ -175,14 +177,14 @@ elif (( PROVIDER_AVAILABLE == 1 )); then
   done
   sleep 3
 
-  AVG_ROW="$(run_sql "select sample_size, moving_average from symbol_averages where symbol='${MA_SYMBOL}' and provider='${PROVIDER}' and window_size=5 order by updated_at desc limit 1;" | tr -d '[:space:]')"
+  AVG_ROW="$(run_sql "select sample_size, moving_average from symbol_averages where symbol='${MA_SYMBOL}' and provider='${ACTUAL_PROVIDER}' and window_size=5 order by updated_at desc limit 1;" | tr -d '[:space:]')"
   AVG_SAMPLE_SIZE="$(cut -d'|' -f1 <<<"$AVG_ROW")"
   AVG_VALUE="$(cut -d'|' -f2 <<<"$AVG_ROW")"
 
   if [[ "$AVG_SAMPLE_SIZE" =~ ^[0-9]+$ ]] && (( AVG_SAMPLE_SIZE >= 5 )) && [[ -n "$AVG_VALUE" ]]; then
-    pass "5-point moving average exists for ${MA_SYMBOL}/${PROVIDER}"
+    pass "5-point moving average exists for ${MA_SYMBOL}/${ACTUAL_PROVIDER}"
   else
-    fail "5-point moving average not found for ${MA_SYMBOL}/${PROVIDER}"
+    fail "5-point moving average not found for ${MA_SYMBOL}/${ACTUAL_PROVIDER}"
   fi
 else
   skip "Moving-average computation check skipped due to provider outage"

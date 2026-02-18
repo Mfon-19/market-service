@@ -2,10 +2,11 @@ import logging
 from datetime import timezone
 from typing import Callable
 
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.models.latest_price import LatestPrice
 from app.models.price_point import PricePoint
 from app.models.raw_market_data import RawMarketData
 from app.models.symbol_average import SymbolAverage
@@ -165,56 +166,47 @@ class PriceIngestionService:
             logger.warning("Invalid cache payload ignored")
             return None
 
-    def read_latest_persisted(self, symbol: str, provider: str) -> PriceLatestResponse | None:
-        symbol_normalized = symbol.strip().upper()
+    def _latest_provider_candidates(self, provider: str) -> list[str]:
         provider_normalized = provider.strip().lower()
-        provider_candidates = [provider_normalized]
+        candidates = [provider_normalized]
+
         if self._settings.enable_yahoo_rate_limit_fallback and provider_normalized == "yahoo":
             fallback_provider = self._settings.yahoo_rate_limit_fallback_provider.strip().lower()
-            if fallback_provider and fallback_provider not in provider_candidates:
-                provider_candidates.append(fallback_provider)
+            if fallback_provider and fallback_provider not in candidates:
+                candidates.append(fallback_provider)
+
+        return candidates
+
+    def read_latest_from_store(self, symbol: str, provider: str) -> PriceLatestResponse | None:
+        symbol_normalized = symbol.strip().upper()
+        candidates = self._latest_provider_candidates(provider)
 
         with self._session_factory() as db:
-            latest_provider: str | None = None
-            latest_price = None
-            latest_timestamp = None
-            latest_moving_average = None
-
-            for candidate in provider_candidates:
-                row = db.execute(
-                    select(PricePoint.price, PricePoint.as_of)
-                    .where(
-                        PricePoint.symbol == symbol_normalized,
-                        PricePoint.provider == candidate,
-                    )
-                    .order_by(desc(PricePoint.as_of))
-                    .limit(1)
-                ).first()
+            latest_row: LatestPrice | None = None
+            for candidate in candidates:
+                row = db.get(LatestPrice, (candidate, symbol_normalized))
                 if row is None:
                     continue
+                if latest_row is None or row.timestamp > latest_row.timestamp:
+                    latest_row = row
 
-                if latest_timestamp is None or row.as_of > latest_timestamp:
-                    moving_average = db.execute(
-                        select(SymbolAverage.moving_average).where(
-                            SymbolAverage.symbol == symbol_normalized,
-                            SymbolAverage.provider == candidate,
-                            SymbolAverage.window_size == 5,
-                        )
-                    ).scalar_one_or_none()
-
-                    latest_provider = candidate
-                    latest_price = row.price
-                    latest_timestamp = row.as_of
-                    latest_moving_average = moving_average
-
-            if latest_provider is None or latest_timestamp is None or latest_price is None:
+            if latest_row is None:
                 return None
 
             return PriceLatestResponse(
-                symbol=symbol_normalized,
-                provider=latest_provider,
-                price=latest_price,
-                timestamp=latest_timestamp,
-                moving_average_5=latest_moving_average,
-                cached=True,
+                symbol=latest_row.symbol,
+                provider=latest_row.provider,
+                price=latest_row.price,
+                timestamp=latest_row.timestamp,
+                moving_average_5=latest_row.moving_average_5,
+                cached=False,
             )
+
+    def warm_cache(self, requested_provider: str, response: PriceLatestResponse) -> None:
+        payload = response.model_dump(mode="json")
+        cache_keys = {requested_provider.strip().lower(), response.provider.strip().lower()}
+        for cache_provider in cache_keys:
+            self._cache.set_latest(symbol=response.symbol, provider=cache_provider, payload=payload)
+
+    def read_latest_persisted(self, symbol: str, provider: str) -> PriceLatestResponse | None:
+        return self.read_latest_from_store(symbol=symbol, provider=provider)

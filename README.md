@@ -46,9 +46,10 @@ Returns `202 Accepted`:
 
 - **Worker service** (`worker/consumer.py`)
   - Consumes `price-events`
-  - Reads last 5 `price_points` per symbol/provider
-  - Computes moving average
-  - Upserts into `symbol_averages`
+  - Processes events in batches (single DB transaction per batch)
+  - Computes MA5 in O(1) using in-memory rolling windows per `(provider,symbol)`
+  - Upserts into `symbol_averages` and `latest_prices`
+  - Uses idempotent event tracking (`processed_price_events`) to handle replays safely
 
 ## Data model
 
@@ -58,6 +59,10 @@ Returns `202 Accepted`:
   - Normalized price points with symbol/provider/as_of and raw reference id
 - `symbol_averages`
   - Latest moving average row per `(symbol, provider, window_size)`
+- `latest_prices`
+  - O(1) read model for latest price + MA5 by `(provider, symbol)`
+- `processed_price_events`
+  - Idempotency table keyed by `price_point_id` for replay-safe consumer writes
 - `polling_jobs`
   - Persistent polling job configs and run state
 
@@ -81,6 +86,14 @@ Rate-limit knobs (important for Yahoo):
 - `PROVIDER_HTTP_BACKOFF_SECONDS`
 - `ENABLE_YAHOO_RATE_LIMIT_FALLBACK`
 - `YAHOO_RATE_LIMIT_FALLBACK_PROVIDER` (set to `alpha_vantage`)
+
+Consumer throughput knobs:
+- `CONSUMER_BATCH_SIZE`
+- `CONSUMER_POLL_TIMEOUT_MS`
+- `CONSUMER_RETRY_BACKOFF_SECONDS`
+
+Kafka partitioning:
+- `KAFKA_TOPIC_PARTITIONS`
 
 3. Start stack:
 
@@ -127,11 +140,25 @@ Prometheus scrapes:
 - Worker metrics at `consumer:9108/metrics`
 
 Custom metrics include:
-- Provider call latency/error/rate-limit waits
-- Kafka publish and consume counters
-- DB query latency
-- Cache hit/miss
-- Kafka consumer lag gauge
+- `http_request_duration_seconds{route,method,status}`
+- `latest_price_request_duration_seconds{cached,status}`
+- provider call latency/error/rate-limit metrics
+- `cache_hit_total`, `cache_miss_total`
+- `events_processed_total`
+- `consumer_process_duration_seconds`
+- `price_pipeline_end_to_end_seconds`
+- `db_write_duration_seconds`
+- `kafka_consumer_lag`
+
+## Benchmarking
+
+See `BENCHMARK.md` for synthetic load commands and dashboard interpretation.
+
+## Migration
+
+Manual SQL migration for scaling/performance updates:
+
+- `migrations/20260218_scaling_perf.sql`
 
 ## Development without Docker
 
@@ -150,3 +177,5 @@ python -m worker.consumer
 ```
 
 (Requires local Postgres, Kafka, and Redis configured via `.env`.)
+
+Note: MA5 rolling windows are in-memory per consumer instance and reset on consumer restart.
