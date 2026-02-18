@@ -17,7 +17,7 @@
       "title": "API /prices/latest Latency (p50/p95/p99)",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(latest_price_request_duration_seconds_bucket{cached=\"true\"}[5m])) by (le))",
@@ -50,7 +50,7 @@
       "title": "Cache Hit Ratio",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "sum(rate(cache_hit_total[5m])) / clamp_min(sum(rate(cache_hit_total[5m])) + sum(rate(cache_miss_total[5m])), 1)",
@@ -71,7 +71,7 @@
       "title": "Consumer Lag",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "sum(kafka_consumer_lag)",
@@ -84,7 +84,7 @@
       "title": "Pipeline End-to-End p95",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(price_pipeline_end_to_end_seconds_bucket[5m])) by (le))",
@@ -97,7 +97,7 @@
       "title": "Events/sec Processed",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "sum(rate(events_processed_total[1m]))",
