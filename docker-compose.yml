@@ -111,6 +111,9 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     container_name: market-grafana
+    environment:
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     ports:
       - "3000:3000"
     volumes:
@@ -118,6 +121,15 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
+      - grafana-renderer
+
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    container_name: market-grafana-renderer
+    environment:
+      ENABLE_METRICS: "true"
+    ports:
+      - "8081:8081"
 
 volumes:
   postgres_data:

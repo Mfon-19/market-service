@@ -154,6 +154,35 @@ Custom metrics include:
 
 See `BENCHMARK.md` for synthetic load commands and dashboard interpretation.
 
+## Latest Soak Result (2h)
+
+Latest recorded soak run:
+- `benchmarks/soak_20260218_160028`
+- Duration: `7200s`
+- Write load: `5000` events/sec (`2000` symbols, provider `bench`)
+- Read load: `500` req/sec (`50` threads, `90/10` hot/cold split)
+
+Observed results:
+- Write generator: `35,999,999` events sent, `0` errors, `5000.00` achieved eps
+- Read generator: `3,600,000` requests, `0` errors, `~500` achieved rps
+- Read latency (generator-side): p50 `~5ms`, p95 `~50ms`, p99 `~50ms`, avg `~7.27ms`
+- Cache hit ratio: `~90.34%`
+- Consumer processed rate (Prometheus 5m): `~893` events/sec
+- Consumer lag at end: `~29.1M`
+
+Interpretation:
+- API read path remained stable under the tested read load.
+- The consumer path is the current throughput bottleneck at this profile (`5000` eps in vs `~900` eps out), which caused sustained lag growth.
+- `api_cached_p95_seconds_5m` / `api_uncached_p95_seconds_5m` were `NaN` in the saved summary snapshot due to query timing, but live Prometheus queries after the run returned valid values.
+
+Dashboard snapshots (last 2 hours from the run):
+
+![API latency panel](docs/images/perf_panel_1_api_latency.png)
+![Cache hit ratio panel](docs/images/perf_panel_2_cache_hit_ratio.png)
+![Consumer lag panel](docs/images/perf_panel_3_consumer_lag.png)
+![Pipeline p95 panel](docs/images/perf_panel_4_pipeline_p95.png)
+![Events per second panel](docs/images/perf_panel_5_events_per_sec.png)
+
 ## Migration
 
 Manual SQL migration for scaling/performance updates:

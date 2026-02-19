@@ -18,3 +18,4 @@ postgres_data/
 redis_data/
 grafana_data/
 benchmarks/
+dashboard_exports/
