@@ -1,3 +1,5 @@
+"""Database bootstrap helpers for table creation and performance indexes."""
+
 from sqlalchemy import text
 
 from app.db.session import engine
@@ -13,6 +15,7 @@ from app.models import (  # noqa: F401
 
 
 def _ensure_perf_indexes() -> None:
+    """Create non-blocking performance indexes required by hot query paths."""
     ddl_statements = [
         (
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_price_points_ps_ts_desc_inc "
@@ -26,5 +29,6 @@ def _ensure_perf_indexes() -> None:
 
 
 def init_db() -> None:
+    """Create mapped tables and ensure supplemental indexes exist."""
     Base.metadata.create_all(bind=engine)
     _ensure_perf_indexes()

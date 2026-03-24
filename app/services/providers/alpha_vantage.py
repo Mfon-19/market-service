@@ -1,3 +1,5 @@
+"""Alpha Vantage provider adapter for latest-quote lookups."""
+
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -9,6 +11,8 @@ from app.services.rate_limiter import MinuteRateLimiter
 
 
 class AlphaVantageProvider(ProviderClient):
+    """Fetches the latest quote using Alpha Vantage's global quote endpoint."""
+
     name = "alpha_vantage"
 
     def __init__(
@@ -19,6 +23,15 @@ class AlphaVantageProvider(ProviderClient):
         http_max_retries: int,
         http_backoff_seconds: float,
     ) -> None:
+        """Initialize the Alpha Vantage client and its request policy.
+
+        Args:
+            api_key: Alpha Vantage API key.
+            timeout_seconds: HTTP timeout for provider calls.
+            rate_limiter: In-process limiter for outgoing provider requests.
+            http_max_retries: Maximum number of retry attempts for transient failures.
+            http_backoff_seconds: Base delay used for exponential backoff.
+        """
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
         self.rate_limiter = rate_limiter
@@ -26,6 +39,14 @@ class AlphaVantageProvider(ProviderClient):
         self.http_backoff_seconds = max(0.1, http_backoff_seconds)
 
     def get_latest_price(self, symbol: str) -> ProviderQuote:
+        """Fetch and normalize the latest Alpha Vantage quote for a symbol.
+
+        Args:
+            symbol: Market symbol to fetch.
+
+        Returns:
+            ProviderQuote: Normalized quote built from the Alpha Vantage response.
+        """
         if not self.api_key:
             raise ProviderError("alpha vantage API key is not configured")
 

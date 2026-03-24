@@ -1,3 +1,5 @@
+"""Scheduler-backed management of persistent market polling jobs."""
+
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -17,13 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 class PollingJobManager:
+    """Creates, restores, and runs persistent polling jobs with APScheduler."""
+
     def __init__(self, session_factory: Callable[[], Session], ingestion_service: PriceIngestionService) -> None:
+        """Initialize the polling manager and its scheduler.
+
+        Args:
+            session_factory: Factory that creates database sessions on demand.
+            ingestion_service: Service used to fetch and publish prices for each run.
+        """
         self._session_factory = session_factory
         self._ingestion_service = ingestion_service
         self._scheduler = BackgroundScheduler(timezone=timezone.utc)
         self._started = False
 
     def start(self) -> None:
+        """Start the scheduler and restore any active persisted jobs."""
         if self._started:
             return
 
@@ -32,6 +43,7 @@ class PollingJobManager:
         self._started = True
 
     def stop(self) -> None:
+        """Stop the scheduler without waiting for in-flight jobs to finish."""
         if not self._started:
             return
 
@@ -39,6 +51,15 @@ class PollingJobManager:
         self._started = False
 
     def create_job(self, db: Session, request: PollJobCreateRequest) -> PollingJob:
+        """Persist a new polling job and register it with the scheduler.
+
+        Args:
+            db: Database session used to persist the job.
+            request: Validated polling job payload.
+
+        Returns:
+            PollingJob: Newly created persisted job.
+        """
         job = PollingJob(
             provider=request.provider,
             symbols=request.symbols,
@@ -53,6 +74,11 @@ class PollingJobManager:
         return job
 
     def register_job(self, job: PollingJob) -> None:
+        """Register or replace a scheduler entry for a persisted polling job.
+
+        Args:
+            job: Persisted job definition to schedule.
+        """
         self._scheduler.add_job(
             self._run_job,
             trigger="interval",
@@ -66,12 +92,18 @@ class PollingJobManager:
         )
 
     def _restore_active_jobs(self) -> None:
+        """Load active jobs from the database into the in-memory scheduler."""
         with self._session_factory() as db:
             jobs = db.query(PollingJob).filter(PollingJob.is_active.is_(True)).all()
             for job in jobs:
                 self.register_job(job)
 
     def _run_job(self, job_id: str) -> None:
+        """Execute one polling job run for all configured symbols.
+
+        Args:
+            job_id: Polling job identifier serialized for APScheduler.
+        """
         try:
             job_uuid = uuid.UUID(job_id)
         except ValueError:

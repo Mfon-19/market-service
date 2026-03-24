@@ -1,3 +1,5 @@
+"""Idempotency model tracking which price events were already consumed."""
+
 import uuid
 from datetime import datetime
 
@@ -9,6 +11,8 @@ from app.models.base import Base
 
 
 class ProcessedPriceEvent(Base):
+    """Records processed Kafka events to make consumer writes replay-safe."""
+
     __tablename__ = "processed_price_events"
 
     price_point_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)

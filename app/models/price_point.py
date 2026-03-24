@@ -1,3 +1,5 @@
+"""Normalized price-point model linked to raw provider responses."""
+
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -10,6 +12,8 @@ from app.models.base import Base
 
 
 class PricePoint(Base):
+    """Stores one normalized market price observation."""
+
     __tablename__ = "price_points"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

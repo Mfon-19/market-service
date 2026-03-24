@@ -1,9 +1,13 @@
+"""Centralized runtime settings loaded from environment variables and `.env`."""
+
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Holds configuration for the API, worker, storage, and provider clients."""
+
     app_name: str = "market-data-service"
     environment: str = "dev"
     log_level: str = "INFO"
@@ -49,6 +53,11 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Return a cached settings instance for the current process.
+
+    Returns:
+        Settings: Parsed application settings.
+    """
     return Settings()
 
 

@@ -1,3 +1,5 @@
+"""Prometheus metric definitions shared by the API and worker processes."""
+
 from prometheus_client import Counter, Gauge, Histogram
 
 

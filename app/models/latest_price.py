@@ -1,3 +1,5 @@
+"""Read-model table for fast latest-price lookups by symbol and provider."""
+
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -10,6 +12,8 @@ from app.models.base import Base
 
 
 class LatestPrice(Base):
+    """Stores the current latest price and MA5 snapshot per symbol/provider."""
+
     __tablename__ = "latest_prices"
 
     provider: Mapped[str] = mapped_column(String(32), primary_key=True)

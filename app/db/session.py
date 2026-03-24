@@ -1,3 +1,5 @@
+"""Database engine and session helpers used by the API and worker processes."""
+
 from typing import Generator
 
 from sqlalchemy import create_engine
@@ -16,6 +18,11 @@ SessionLocal = sessionmaker(
 
 
 def get_db() -> Generator[Session, None, None]:
+    """Yield a SQLAlchemy session for one request scope.
+
+    Yields:
+        Session: Database session bound to the configured engine.
+    """
     db = SessionLocal()
     try:
         yield db

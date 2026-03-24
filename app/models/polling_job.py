@@ -1,3 +1,5 @@
+"""Persistent polling job configuration and runtime metadata model."""
+
 import uuid
 from datetime import datetime
 
@@ -9,6 +11,8 @@ from app.models.base import Base
 
 
 class PollingJob(Base):
+    """Represents a scheduled provider polling job stored in the database."""
+
     __tablename__ = "polling_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

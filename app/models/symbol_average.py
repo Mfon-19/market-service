@@ -1,3 +1,5 @@
+"""Rolling-average projection model keyed by symbol, provider, and window."""
+
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -10,6 +12,8 @@ from app.models.base import Base
 
 
 class SymbolAverage(Base):
+    """Stores the latest computed moving average for one symbol/provider pair."""
+
     __tablename__ = "symbol_averages"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

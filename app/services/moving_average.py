@@ -1,3 +1,5 @@
+"""Consumer-side moving-average projection logic for price events."""
+
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -19,6 +21,15 @@ from app.services.metrics import (
 
 
 def calculate_moving_average(prices: list[Decimal], window_size: int = 5) -> Decimal | None:
+    """Calculate a moving average from the first complete window in a list.
+
+    Args:
+        prices: Ordered price values to average.
+        window_size: Number of points required for the moving average.
+
+    Returns:
+        Decimal | None: Window average when enough prices exist, otherwise `None`.
+    """
     if len(prices) < window_size:
         return None
     window = prices[:window_size]
@@ -27,14 +38,25 @@ def calculate_moving_average(prices: list[Decimal], window_size: int = 5) -> Dec
 
 @dataclass
 class RollingWindowState:
+    """Tracks an O(1) rolling sum and bounded window of recent prices."""
+
     window_size: int
     prices: deque[Decimal] = field(init=False)
     rolling_sum: Decimal = field(default=Decimal("0"))
 
     def __post_init__(self) -> None:
+        """Initialize the bounded deque used for rolling-window updates."""
         self.prices = deque(maxlen=self.window_size)
 
     def add_price(self, price: Decimal) -> tuple[int, Decimal | None]:
+        """Add a price to the window and return the current sample size and MA.
+
+        Args:
+            price: New price value to append to the rolling window.
+
+        Returns:
+            tuple[int, Decimal | None]: Current sample size and moving average, if complete.
+        """
         if len(self.prices) == self.window_size:
             self.rolling_sum -= self.prices.popleft()
 
@@ -48,12 +70,28 @@ class RollingWindowState:
 
 
 class MovingAverageService:
+    """Processes price events into latest-price and moving-average projections."""
+
     def __init__(self, window_size: int = 5) -> None:
+        """Initialize the in-memory rolling state for one consumer process.
+
+        Args:
+            window_size: Number of prices included in the moving average.
+        """
         self.window_size = window_size
         # In-memory rolling windows are O(1) per event but reset on consumer restart.
         self._state: dict[str, RollingWindowState] = {}
 
     def process_batch(self, db: Session, events: list[PriceEvent]) -> int:
+        """Process one polled batch of Kafka events inside a single transaction.
+
+        Args:
+            db: Database session used for idempotent upserts.
+            events: Parsed price events from Kafka.
+
+        Returns:
+            int: Number of events newly processed in this batch.
+        """
         processed = 0
 
         with DB_WRITE_DURATION_SECONDS.time():
@@ -78,12 +116,29 @@ class MovingAverageService:
         return processed
 
     def _event_timestamp(self, event: PriceEvent) -> datetime:
+        """Normalize an event timestamp to a timezone-aware UTC datetime.
+
+        Args:
+            event: Parsed price event.
+
+        Returns:
+            datetime: Timezone-aware event timestamp.
+        """
         ts = event.timestamp
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
         return ts
 
     def _mark_processed(self, db: Session, event: PriceEvent) -> bool:
+        """Insert an idempotency record and report whether the event is new.
+
+        Args:
+            db: Database session used for the insert.
+            event: Parsed price event being processed.
+
+        Returns:
+            bool: `True` when the event was newly recorded, else `False`.
+        """
         stmt = (
             insert(ProcessedPriceEvent)
             .values(
@@ -100,9 +155,25 @@ class MovingAverageService:
         return inserted_id is not None
 
     def _state_key(self, event: PriceEvent) -> str:
+        """Build the in-memory state key for one provider/symbol stream.
+
+        Args:
+            event: Parsed price event.
+
+        Returns:
+            str: Provider/symbol key used in the rolling-state map.
+        """
         return f"{event.provider}:{event.symbol}"
 
     def _update_state(self, event: PriceEvent) -> tuple[int, Decimal | None]:
+        """Advance in-memory rolling state for a single event.
+
+        Args:
+            event: Parsed price event.
+
+        Returns:
+            tuple[int, Decimal | None]: Current sample size and moving average, if complete.
+        """
         key = self._state_key(event)
         state = self._state.get(key)
         if state is None:
@@ -119,6 +190,14 @@ class MovingAverageService:
         sample_size: int,
         moving_average: Decimal,
     ) -> None:
+        """Upsert the latest symbol-average projection for a completed window.
+
+        Args:
+            db: Database session used for the upsert.
+            event: Parsed price event driving the projection update.
+            sample_size: Number of prices currently represented in the window.
+            moving_average: Computed moving average value.
+        """
         event_ts = self._event_timestamp(event)
         stmt = insert(SymbolAverage).values(
             symbol=event.symbol,
@@ -142,6 +221,13 @@ class MovingAverageService:
         db.execute(stmt)
 
     def _upsert_latest_price(self, db: Session, event: PriceEvent, moving_average: Decimal | None) -> None:
+        """Upsert the latest-price read model for the event's symbol/provider.
+
+        Args:
+            db: Database session used for the upsert.
+            event: Parsed price event driving the projection update.
+            moving_average: Latest MA5 value, if the window is complete.
+        """
         event_ts = self._event_timestamp(event)
         stmt = insert(LatestPrice).values(
             provider=event.provider,
@@ -166,6 +252,11 @@ class MovingAverageService:
         db.execute(stmt)
 
     def _observe_pipeline_latency(self, event: PriceEvent) -> None:
+        """Record end-to-end latency from event timestamp to projection update.
+
+        Args:
+            event: Parsed price event whose latency is being measured.
+        """
         event_ts = self._event_timestamp(event)
         latency_seconds = max(0.0, (datetime.now(timezone.utc) - event_ts).total_seconds())
         PRICE_PIPELINE_END_TO_END_SECONDS.observe(latency_seconds)

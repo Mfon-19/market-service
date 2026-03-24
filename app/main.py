@@ -1,3 +1,5 @@
+"""Application entrypoint that wires routes, shared services, and metrics."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,6 +20,14 @@ from app.services.providers.factory import ProviderFactory
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Initialize shared services for the FastAPI application lifecycle.
+
+    Args:
+        app: FastAPI application instance receiving initialized shared state.
+
+    Yields:
+        None: Control back to FastAPI while the application is running.
+    """
     init_db()
 
     provider_factory = ProviderFactory(settings)

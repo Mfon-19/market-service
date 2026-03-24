@@ -1,3 +1,5 @@
+"""Price API routes for latest reads and persistent polling jobs."""
+
 import uuid
 from math import ceil
 import time
@@ -31,6 +33,19 @@ def get_latest_price(
     provider: str = Query(default=settings.default_provider, min_length=1),
     ingestion: PriceIngestionService = Depends(get_ingestion_service),
 ) -> PriceLatestResponse:
+    """Return the latest known price for a symbol, fetching on cache miss.
+
+    Args:
+        symbol: Requested market symbol.
+        provider: Requested provider name.
+        ingestion: Service that reads, fetches, stores, and publishes prices.
+
+    Returns:
+        PriceLatestResponse: Latest price payload, optionally marked as cached.
+
+    Raises:
+        HTTPException: If validation fails or upstream providers cannot satisfy the request.
+    """
     symbol_normalized = symbol.strip().upper()
     provider_normalized = provider.strip().lower()
     started = time.perf_counter()
@@ -85,6 +100,20 @@ def create_polling_job(
     manager: PollingJobManager = Depends(get_polling_manager),
     provider_factory: ProviderFactory = Depends(get_provider_factory),
 ) -> PollJobAcceptedResponse:
+    """Create and schedule a persistent polling job for one provider.
+
+    Args:
+        payload: Requested polling job configuration.
+        db: Database session used to persist the job.
+        manager: Scheduler-backed polling manager.
+        provider_factory: Factory used to validate provider availability.
+
+    Returns:
+        PollJobAcceptedResponse: Accepted job identifier.
+
+    Raises:
+        HTTPException: If the request violates validation or rate-limit constraints.
+    """
     if payload.interval_seconds < settings.poll_min_interval_seconds:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,6 +155,18 @@ def get_polling_job(
     job_id: uuid.UUID,
     db: Session = Depends(get_db),
 ) -> PollJobStatusResponse:
+    """Return the current persisted status for a polling job.
+
+    Args:
+        job_id: Polling job identifier.
+        db: Database session used to read job state.
+
+    Returns:
+        PollJobStatusResponse: Current job metadata and execution timestamps.
+
+    Raises:
+        HTTPException: If the polling job does not exist.
+    """
     job = db.get(PollingJob, job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")

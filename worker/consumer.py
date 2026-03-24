@@ -1,3 +1,5 @@
+"""Kafka consumer process that builds latest-price and moving-average projections."""
+
 import json
 import logging
 import time
@@ -23,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 def create_consumer() -> KafkaConsumer:
+    """Create a Kafka consumer, retrying until brokers are available.
+
+    Returns:
+        KafkaConsumer: Connected consumer subscribed to the configured topic.
+    """
     while True:
         try:
             return KafkaConsumer(
@@ -40,6 +47,14 @@ def create_consumer() -> KafkaConsumer:
 
 
 def flatten_records(records_map: dict) -> list:
+    """Flatten Kafka poll results into one ordered list of messages.
+
+    Args:
+        records_map: Mapping of topic partitions to fetched Kafka records.
+
+    Returns:
+        list: Concatenated record list across partitions.
+    """
     ordered_records: list = []
     for records in records_map.values():
         ordered_records.extend(records)
@@ -47,6 +62,14 @@ def flatten_records(records_map: dict) -> list:
 
 
 def parse_events(messages: Iterable) -> list[PriceEvent]:
+    """Validate Kafka messages into `PriceEvent` objects, skipping bad payloads.
+
+    Args:
+        messages: Kafka messages returned by the consumer.
+
+    Returns:
+        list[PriceEvent]: Parsed events that passed schema validation.
+    """
     events: list[PriceEvent] = []
     for message in messages:
         try:
@@ -57,6 +80,12 @@ def parse_events(messages: Iterable) -> list[PriceEvent]:
 
 
 def update_lag(consumer: KafkaConsumer, records_map: dict) -> None:
+    """Update Prometheus lag gauges for the partitions in the current poll.
+
+    Args:
+        consumer: Kafka consumer used to fetch end offsets.
+        records_map: Mapping of topic partitions to fetched Kafka records.
+    """
     if not records_map:
         return
 
@@ -72,6 +101,7 @@ def update_lag(consumer: KafkaConsumer, records_map: dict) -> None:
 
 
 def main() -> None:
+    """Run the consumer loop that polls, projects, and commits Kafka batches."""
     init_db()
     start_http_server(settings.worker_metrics_port)
     consumer = create_consumer()

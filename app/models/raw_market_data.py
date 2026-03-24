@@ -1,3 +1,5 @@
+"""Raw provider response model used for auditing and replay support."""
+
 import uuid
 
 from sqlalchemy import DateTime, Index, Integer, String, func
@@ -8,6 +10,8 @@ from app.models.base import Base
 
 
 class RawMarketData(Base):
+    """Stores the original provider payload for a fetched market quote."""
+
     __tablename__ = "raw_market_data"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

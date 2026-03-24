@@ -1,3 +1,5 @@
+"""Kafka producer wrapper for publishing normalized price events."""
+
 import json
 import logging
 
@@ -14,7 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 class PriceEventProducer:
+    """Publishes normalized price events to Kafka when brokers are available."""
+
     def __init__(self, settings: Settings) -> None:
+        """Initialize the Kafka producer and ensure the topic exists.
+
+        Args:
+            settings: Runtime settings containing Kafka configuration.
+        """
         self.topic = settings.kafka_topic
         self.topic_partitions = max(1, settings.kafka_topic_partitions)
         self.enabled = True
@@ -33,6 +42,11 @@ class PriceEventProducer:
             self.enabled = False
 
     def _ensure_topic(self, settings: Settings) -> None:
+        """Create the Kafka topic and grow partition count when needed.
+
+        Args:
+            settings: Runtime settings containing Kafka bootstrap information.
+        """
         try:
             admin = KafkaAdminClient(bootstrap_servers=settings.kafka_bootstrap_servers)
         except NoBrokersAvailable:
@@ -69,6 +83,11 @@ class PriceEventProducer:
             admin.close()
 
     def send_event(self, event: PriceEvent) -> None:
+        """Publish one normalized price event to Kafka.
+
+        Args:
+            event: Event payload to serialize and send.
+        """
         if not self.enabled or self._producer is None:
             return
 
@@ -82,6 +101,7 @@ class PriceEventProducer:
             logger.exception("Failed to publish Kafka message")
 
     def close(self) -> None:
+        """Flush outstanding Kafka messages and close the producer."""
         if self._producer is not None:
             self._producer.flush(timeout=5)
             self._producer.close()

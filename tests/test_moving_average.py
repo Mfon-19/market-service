@@ -1,9 +1,12 @@
+"""Unit tests for moving-average helpers and rolling-window state updates."""
+
 from decimal import Decimal
 
 from app.services.moving_average import RollingWindowState, calculate_moving_average
 
 
 def test_calculate_moving_average_returns_none_with_fewer_than_five_points() -> None:
+    """Verify that incomplete windows do not produce a moving average."""
     result = calculate_moving_average(
         [Decimal("100.0"), Decimal("101.0"), Decimal("102.0")],
         window_size=5,
@@ -12,6 +15,7 @@ def test_calculate_moving_average_returns_none_with_fewer_than_five_points() -> 
 
 
 def test_calculate_moving_average_returns_average_for_last_five_points() -> None:
+    """Verify that a complete five-point window returns the expected average."""
     result = calculate_moving_average(
         [
             Decimal("100.0"),
@@ -26,6 +30,7 @@ def test_calculate_moving_average_returns_average_for_last_five_points() -> None
 
 
 def test_rolling_window_state_updates_in_o1_style() -> None:
+    """Verify rolling state drops the oldest point and keeps O(1) updates."""
     state = RollingWindowState(window_size=5)
 
     for value in [Decimal("1"), Decimal("2"), Decimal("3"), Decimal("4")]:

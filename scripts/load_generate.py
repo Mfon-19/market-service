@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate synthetic Kafka price events for throughput and soak testing."""
+
 import argparse
 import json
 import random
@@ -11,6 +13,11 @@ from kafka import KafkaProducer
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the synthetic Kafka load generator.
+
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(description="Synthetic Kafka price-event load generator")
     parser.add_argument("--bootstrap-servers", default="localhost:29092")
     parser.add_argument("--topic", default="price-events")
@@ -23,6 +30,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run the synthetic Kafka producer loop and print a summary."""
     args = parse_args()
     symbols = [f"SYM{i:05d}" for i in range(args.symbols)]
     interval = 1.0 / max(1, args.rate)
@@ -34,6 +42,11 @@ def main() -> None:
     lock = Lock()
 
     def on_error(exc: Exception) -> None:
+        """Track asynchronous producer send failures.
+
+        Args:
+            exc: Exception raised by the Kafka producer callback.
+        """
         with lock:
             counters["errors"] += 1
         print(f"send_error={exc}")

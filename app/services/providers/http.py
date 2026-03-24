@@ -1,3 +1,5 @@
+"""Shared HTTP retry and backoff helpers used by provider clients."""
+
 import random
 import time
 
@@ -8,6 +10,14 @@ from app.services.providers.exceptions import ProviderError, ProviderRateLimitEr
 
 
 def _retry_after_seconds(response: requests.Response) -> float | None:
+    """Parse a numeric `Retry-After` response header when present.
+
+    Args:
+        response: HTTP response returned by the upstream provider.
+
+    Returns:
+        float | None: Parsed retry delay in seconds, or `None` if unavailable.
+    """
     retry_after = response.headers.get("Retry-After")
     if not retry_after:
         return None
@@ -32,6 +42,24 @@ def request_with_backoff(
     max_retries: int,
     base_backoff_seconds: float,
 ) -> requests.Response:
+    """Execute an HTTP GET with retry/backoff handling for providers.
+
+    Args:
+        provider_name: Provider identifier used in metrics and errors.
+        symbol: Market symbol being requested.
+        url: Provider endpoint URL.
+        params: Query-string parameters for the request.
+        timeout_seconds: Request timeout in seconds.
+        max_retries: Maximum number of retry attempts for retryable failures.
+        base_backoff_seconds: Base delay used for exponential backoff.
+
+    Returns:
+        requests.Response: Successful HTTP response.
+
+    Raises:
+        ProviderRateLimitError: If rate-limited retries are exhausted.
+        ProviderError: If a non-retryable request failure occurs.
+    """
     attempt = 0
     while True:
         response = requests.get(url, params=params, timeout=timeout_seconds)

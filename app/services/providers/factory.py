@@ -1,3 +1,5 @@
+"""Factory for constructing and retrieving configured provider clients."""
+
 from app.core.config import Settings
 from app.services.providers.alpha_vantage import AlphaVantageProvider
 from app.services.providers.base import ProviderClient
@@ -7,7 +9,14 @@ from app.services.rate_limiter import MinuteRateLimiter
 
 
 class ProviderFactory:
+    """Owns the configured provider client instances for the process."""
+
     def __init__(self, settings: Settings) -> None:
+        """Create provider clients using the shared runtime configuration.
+
+        Args:
+            settings: Runtime settings with provider credentials and limits.
+        """
         self._settings = settings
         self._clients: dict[str, ProviderClient] = {
             "yahoo": YahooFinanceProvider(
@@ -33,6 +42,17 @@ class ProviderFactory:
         }
 
     def get_client(self, provider: str | None) -> ProviderClient:
+        """Return a provider client by name, falling back to the default provider.
+
+        Args:
+            provider: Requested provider identifier or `None`.
+
+        Returns:
+            ProviderClient: Configured provider client instance.
+
+        Raises:
+            ValueError: If the requested provider is not supported.
+        """
         provider_name = (provider or self._settings.default_provider).strip().lower()
         client = self._clients.get(provider_name)
         if client is None:
@@ -41,4 +61,9 @@ class ProviderFactory:
         return client
 
     def supported_providers(self) -> list[str]:
+        """Return the sorted list of supported provider identifiers.
+
+        Returns:
+            list[str]: Supported provider names.
+        """
         return sorted(self._clients.keys())

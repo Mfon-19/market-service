@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate HTTP read load against the latest-price endpoint and summarize results."""
+
 import argparse
 import json
 import math
@@ -15,6 +17,8 @@ LATENCY_BUCKETS_MS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 1000
 
 @dataclass
 class WorkerStats:
+    """Aggregated counters and latency buckets for one load-generator worker."""
+
     total_requests: int = 0
     success_requests: int = 0
     error_requests: int = 0
@@ -27,6 +31,11 @@ class WorkerStats:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the HTTP read-load generator.
+
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(description="HTTP read-load generator for /prices/latest")
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--provider", default="bench")
@@ -44,6 +53,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def latency_bucket_index(latency_ms: float) -> int:
+    """Map a latency value to the configured histogram bucket index.
+
+    Args:
+        latency_ms: Observed request latency in milliseconds.
+
+    Returns:
+        int: Histogram bucket index for the observed latency.
+    """
     for i, bound in enumerate(LATENCY_BUCKETS_MS):
         if latency_ms <= bound:
             return i
@@ -58,6 +75,19 @@ def select_symbol(
     symbol_prefix: str,
     symbol_width: int,
 ) -> str:
+    """Choose a symbol using the configured hot/cold access distribution.
+
+    Args:
+        rng: Random number generator for the worker thread.
+        symbol_pool: Total number of possible symbols.
+        hot_symbols: Size of the hot subset at the front of the pool.
+        hot_ratio: Probability of selecting from the hot subset.
+        symbol_prefix: Prefix used when rendering a symbol.
+        symbol_width: Zero-padding width for the numeric suffix.
+
+    Returns:
+        str: Selected symbol identifier.
+    """
     if symbol_pool <= hot_symbols or rng.random() < hot_ratio:
         index = rng.randrange(max(1, hot_symbols))
     else:
@@ -66,6 +96,12 @@ def select_symbol(
 
 
 def merge_stats(dest: WorkerStats, src: WorkerStats) -> None:
+    """Merge one worker's counters into the combined aggregate.
+
+    Args:
+        dest: Aggregate stats that will be updated in place.
+        src: Per-worker stats to merge into the aggregate.
+    """
     dest.total_requests += src.total_requests
     dest.success_requests += src.success_requests
     dest.error_requests += src.error_requests
@@ -79,6 +115,15 @@ def merge_stats(dest: WorkerStats, src: WorkerStats) -> None:
 
 
 def approximate_quantile_from_histogram(hist: list[int], q: float) -> float:
+    """Estimate a quantile from a cumulative histogram bucket count.
+
+    Args:
+        hist: Histogram bucket counts.
+        q: Desired quantile between 0 and 1.
+
+    Returns:
+        float: Approximate bucket upper bound for the requested quantile.
+    """
     total = sum(hist)
     if total == 0:
         return math.nan
@@ -94,6 +139,7 @@ def approximate_quantile_from_histogram(hist: list[int], q: float) -> float:
 
 
 def main() -> None:
+    """Run concurrent HTTP load, aggregate worker metrics, and print JSON output."""
     args = parse_args()
     total_threads = max(1, args.threads)
     symbol_pool = max(1, args.symbol_pool)
@@ -106,6 +152,11 @@ def main() -> None:
     workers: list[WorkerStats | None] = [None] * total_threads
 
     def worker(idx: int) -> None:
+        """Drive request generation for one thread of the read-load test.
+
+        Args:
+            idx: Worker index used to seed the thread-local RNG.
+        """
         rng = random.Random(idx + int(start))
         session = requests.Session()
         local = WorkerStats()

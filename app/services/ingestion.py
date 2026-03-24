@@ -1,3 +1,5 @@
+"""Core ingestion workflow for fetching, storing, caching, and publishing prices."""
+
 import logging
 from datetime import timezone
 from typing import Callable
@@ -23,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 class PriceIngestionService:
+    """Coordinates provider reads, database writes, caching, and Kafka publishing."""
+
     def __init__(
         self,
         session_factory: Callable[[], Session],
@@ -31,6 +35,15 @@ class PriceIngestionService:
         cache: PriceCache,
         settings: Settings,
     ) -> None:
+        """Build an ingestion service from the process-wide collaborators.
+
+        Args:
+            session_factory: Factory that creates database sessions on demand.
+            provider_factory: Factory that resolves provider clients.
+            producer: Kafka producer used to publish normalized price events.
+            cache: Cache adapter for latest-price responses.
+            settings: Runtime settings controlling fallback behavior.
+        """
         self._session_factory = session_factory
         self._provider_factory = provider_factory
         self._producer = producer
@@ -38,6 +51,15 @@ class PriceIngestionService:
         self._settings = settings
 
     def _call_provider(self, symbol: str, provider: str) -> tuple[ProviderQuote, str]:
+        """Fetch a quote from one provider while recording provider metrics.
+
+        Args:
+            symbol: Market symbol to request.
+            provider: Provider identifier to resolve.
+
+        Returns:
+            tuple[ProviderQuote, str]: Retrieved quote and the provider name used.
+        """
         provider_client = self._provider_factory.get_client(provider)
         provider_name = provider_client.name
 
@@ -50,6 +72,18 @@ class PriceIngestionService:
         return quote, provider_name
 
     def _fetch_quote_with_fallback(self, symbol: str, requested_provider: str) -> tuple[ProviderQuote, str]:
+        """Fetch a quote, optionally retrying with a fallback provider on rate limit.
+
+        Args:
+            symbol: Market symbol to request.
+            requested_provider: Preferred provider identifier.
+
+        Returns:
+            tuple[ProviderQuote, str]: Retrieved quote and the provider name that served it.
+
+        Raises:
+            ProviderRateLimitError: If the primary provider is rate-limited and no fallback succeeds.
+        """
         try:
             return self._call_provider(symbol=symbol, provider=requested_provider)
         except ProviderRateLimitError as primary_exc:
@@ -83,6 +117,15 @@ class PriceIngestionService:
                 raise primary_exc
 
     def fetch_store_publish(self, symbol: str, provider: str | None = None) -> PriceLatestResponse:
+        """Fetch a fresh quote, persist it, publish an event, and warm the cache.
+
+        Args:
+            symbol: Market symbol to fetch.
+            provider: Preferred provider identifier, or `None` for the default.
+
+        Returns:
+            PriceLatestResponse: Latest price response built from the persisted quote.
+        """
         symbol_normalized = symbol.strip().upper()
         requested_provider_name = self._provider_factory.get_client(provider).name
         quote, provider_name = self._fetch_quote_with_fallback(
@@ -156,6 +199,15 @@ class PriceIngestionService:
         return response
 
     def read_cached(self, symbol: str, provider: str) -> PriceLatestResponse | None:
+        """Read the latest-price response from cache when available.
+
+        Args:
+            symbol: Market symbol to look up.
+            provider: Requested provider identifier.
+
+        Returns:
+            PriceLatestResponse | None: Cached response payload, or `None` on miss.
+        """
         cached = self._cache.get_latest(symbol=symbol, provider=provider)
         if not cached:
             return None
@@ -167,6 +219,14 @@ class PriceIngestionService:
             return None
 
     def _latest_provider_candidates(self, provider: str) -> list[str]:
+        """Return provider names that may contain the freshest persisted price.
+
+        Args:
+            provider: Requested provider identifier.
+
+        Returns:
+            list[str]: Candidate providers checked in priority order.
+        """
         provider_normalized = provider.strip().lower()
         candidates = [provider_normalized]
 
@@ -178,6 +238,15 @@ class PriceIngestionService:
         return candidates
 
     def read_latest_from_store(self, symbol: str, provider: str) -> PriceLatestResponse | None:
+        """Read the latest persisted price projection from the database.
+
+        Args:
+            symbol: Market symbol to look up.
+            provider: Requested provider identifier.
+
+        Returns:
+            PriceLatestResponse | None: Persisted latest-price projection, or `None`.
+        """
         symbol_normalized = symbol.strip().upper()
         candidates = self._latest_provider_candidates(provider)
 
@@ -203,10 +272,25 @@ class PriceIngestionService:
             )
 
     def warm_cache(self, requested_provider: str, response: PriceLatestResponse) -> None:
+        """Populate cache entries for both the requested and resolved providers.
+
+        Args:
+            requested_provider: Provider name requested by the caller.
+            response: Response payload to cache.
+        """
         payload = response.model_dump(mode="json")
         cache_keys = {requested_provider.strip().lower(), response.provider.strip().lower()}
         for cache_provider in cache_keys:
             self._cache.set_latest(symbol=response.symbol, provider=cache_provider, payload=payload)
 
     def read_latest_persisted(self, symbol: str, provider: str) -> PriceLatestResponse | None:
+        """Return the latest persisted value as a rate-limit fallback read.
+
+        Args:
+            symbol: Market symbol to look up.
+            provider: Requested provider identifier.
+
+        Returns:
+            PriceLatestResponse | None: Persisted latest-price projection, or `None`.
+        """
         return self.read_latest_from_store(symbol=symbol, provider=provider)

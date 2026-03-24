@@ -1,3 +1,5 @@
+"""Yahoo Finance provider adapter used for default market quote reads."""
+
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -8,6 +10,8 @@ from app.services.rate_limiter import MinuteRateLimiter
 
 
 class YahooFinanceProvider(ProviderClient):
+    """Fetches the latest price data from Yahoo Finance chart responses."""
+
     name = "yahoo"
 
     def __init__(
@@ -17,12 +21,28 @@ class YahooFinanceProvider(ProviderClient):
         http_max_retries: int,
         http_backoff_seconds: float,
     ) -> None:
+        """Initialize the Yahoo client with timeouts, retries, and rate limiting.
+
+        Args:
+            timeout_seconds: HTTP timeout for provider calls.
+            rate_limiter: In-process limiter for outgoing provider requests.
+            http_max_retries: Maximum number of retry attempts for transient failures.
+            http_backoff_seconds: Base delay used for exponential backoff.
+        """
         self.timeout_seconds = timeout_seconds
         self.rate_limiter = rate_limiter
         self.http_max_retries = max(0, http_max_retries)
         self.http_backoff_seconds = max(0.1, http_backoff_seconds)
 
     def get_latest_price(self, symbol: str) -> ProviderQuote:
+        """Fetch and normalize the latest Yahoo Finance quote for a symbol.
+
+        Args:
+            symbol: Market symbol to fetch.
+
+        Returns:
+            ProviderQuote: Normalized quote built from the Yahoo response.
+        """
         waited = self.rate_limiter.acquire()
         if waited > 0:
             PROVIDER_RATE_LIMIT_HITS_TOTAL.labels(provider=self.name).inc()
